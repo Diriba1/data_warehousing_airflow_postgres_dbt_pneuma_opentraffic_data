@@ -8,6 +8,7 @@ __pycache__/
 
 # data 
 /data 
+/airflow_docker/logs
 
 # Distribution / packaging
 .Python
