@@ -1,67 +1,118 @@
-import streamlit as st
-import pandas as pd
-import matplotlib 
-
-
-
-# def clean_data_loader(path='C:/Users/Diriba/Desktop/10AC/Week2/Project/datawarehousing_pneuma_opentraffic_data/Data/20181024_d1_0830_0900.csv'):
-#     # Read your data into a pandas DataFrame
-#     try:
-#         df = pd.read_csv(path,  delimiter=';')
-#         return df
-#     except BaseException:
-#         return "file does not exist or path is not correct"  
-
-
-#df = clean_data_loader()
-
-#df = pd.read_csv('C:/Users/Diriba/Desktop/10AC/Week2/Project/datawarehousing_pneuma_opentraffic_data/Data/20181024_d1_0830_0900.csv', delimiter=';')
 import pandas as pd
 
-# Replace 'your_file_path.csv' with the actual path to your CSV file
-file_path = 'C:/Users/Diriba/Desktop/10AC/Week2/Project/datawarehousing_pneuma_opentraffic_data/Data/20181024_d1_0830_0900.csv'
 
-# Read the CSV file into a DataFrame
-df = pd.read_csv(file_path)
+class DataReader:
+    def __init__(self, file_path=None) -> None:
+        self.filepath = file_path
 
-# Display the first few rows of the DataFrame
-print("First few rows of the DataFrame:")
-print(df.head())
+    def get_uid(self, filename, row_num):
 
-# Display basic information about the DataFrame
-print("\nDataFrame Information:")
-print(df.info())
+        return f"{filename}_{row_num}"
 
-# Summary statistics
-print("\nSummary Statistics:")
-print(df.describe())
+    def read_file(self, path: str) -> list:
+        """Read a file from path and returns list of the lines in the file
 
-# Check for missing values
-print("\nMissing Values:")
-print(df.isnull().sum())
+        Parameters
+        ----------
+        path : str
+            file location path
 
-# # Visualize the distribution of vehicle types
-# import matplotlib.pyplot as plt
-# import seaborn as sns
+        Returns:
+        list
+            the file content in a list
+        """
+        with open(path, 'r') as f:
+            lines = f.readlines()[1:]
+            lines = list(map(lambda l: l.strip('\n'), lines))
+            return lines
 
-# plt.figure(figsize=(10, 6))
-# sns.countplot(data=df, x='type')
-# plt.title('Distribution of Vehicle Types')
-# plt.show()
+    def parse(self, lines: list, filename: str) -> tuple:
+        """parses the lines into 5 columns and returns a pandas DataFrame
 
-# # Geospatial analysis (assuming 'lat' and 'lon' columns)
-# import geopandas as gpd
-# from shapely.geometry import Point
+        Parameters
+        ----------
+        lines : list
+            a list of lines from the source file
+        filename : str
+            the filename, used for generating unique identifiers
 
-# # Create a GeoDataFrame
-# geometry = [Point(lon, lat) for lon, lat in zip(df['lon'], df['lat'])]
-# geo_df = gpd.GeoDataFrame(df, geometry=geometry)
+        Returns
+        -------
+        tuple
+            contains two dataframes. one for the vehicle info and another
+            for their trajectories.
+        """
 
-# # Plot the geographical locations of vehicles
-# world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-# fig, ax = plt.subplots(figsize=(15, 10))
-# world.plot(ax=ax, color='lightgrey')
+        veh_info = {
+            "unique_id": [],
+            "track_id": [],
+            "veh_type": [],
+            "traveled_distance": [],
+            "avg_speed": [],
+        }
+        trajectories = {
+            "unique_id": [],
+            "lat": [],
+            "lon": [],
+            "speed": [],
+            "lon_acc": [],
+            "lat_acc": [],
+            "time": [],
+        }
+        for row_num, line in enumerate(lines):
+            uid = self.get_uid(filename, row_num)
+            line = line.split("; ")[:-1]
+            # assert len(line[4:]) % 6 == 0, f"row number {row_num} caused the error: len(line[4:]) % 6 = {len(line[4:]) % 6}"
+            assert len(line[4:]) % 6 == 0, f"{line}"
+            veh_info["unique_id"].append(uid)
+            veh_info["track_id"].append(int(line[0]))
+            veh_info["veh_type"].append(line[1])
+            veh_info["traveled_distance"].append(float(line[2]))
+            veh_info["avg_speed"].append(float(line[3]))
+            for i in range(0, len(line[4:]), 6):
+                trajectories["unique_id"].append(uid)
+                trajectories["lat"].append(float(line[4+i+0]))
+                trajectories["lon"].append(float(line[4+i+1]))
+                trajectories["speed"].append(float(line[4+i+2]))
+                trajectories["lon_acc"].append(float(line[4+i+3]))
+                trajectories["lat_acc"].append(float(line[4+i+4]))
+                trajectories["time"].append(float(line[4+i+5]))
 
-# geo_df.plot(ax=ax, markersize=10, color='red', alpha=0.5)
-# plt.title('Geographical Locations of Vehicles')
-# plt.show()
+        vehicle_df = pd.DataFrame(veh_info).reset_index(drop=True)
+        trajectories_df = pd.DataFrame(trajectories).reset_index(drop=True)
+        return vehicle_df, trajectories_df
+
+    def get_dfs(self, file_path: str = None, v=0) -> tuple:
+        """This calls the above two function. It takes the files path
+        and returns a pandas dataframe object
+
+        Parameters
+        ----------
+        file_path : str
+            raw csv file path
+        v: int
+            verbosity selector
+
+        Returns
+        -------
+        tuple
+            transformed version of csv as two pd.DataFrame
+        """
+        if not file_path and self.filepath:
+            file_path = self.filepath
+
+        lines = self.read_file(file_path)
+        filename = file_path.split("/")[-1].strip(".csv")
+        vehicle_df, trajectories_df = self.parse(lines, filename)
+        if v > 0:
+            print("vehicle dataframe")
+            print(vehicle_df.head())
+            print(vehicle_df.info())
+            print("trajectories dataframe")
+            print(trajectories_df.head())
+            print(trajectories_df.info())
+        return vehicle_df, trajectories_df
+
+
+if __name__ == "__main__":
+    DataReader(file_path="../data/20181030_d1_0830_0900.csv").get_dfs(v=1)
